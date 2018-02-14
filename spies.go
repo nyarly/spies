@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/stretchr/testify/mock"
 )
@@ -45,6 +46,7 @@ type (
 	Spy struct {
 		matchers []matcher
 		calls    []Call
+		sync.RWMutex
 	}
 
 	// A PassedArger implements PassedArgs
@@ -86,6 +88,8 @@ func CallCount(n int) func(mock.Arguments) bool {
 
 func (s *Spy) String() string {
 	str := "Calls: "
+	s.RLock()
+	defer s.RUnlock()
 	for _, c := range s.calls {
 		str += c.String() + "\n"
 	}
@@ -166,12 +170,16 @@ func (s *Spy) Called(argList ...interface{}) results {
 
 	found := s.findArgs(functionName, args)
 
+	s.Lock()
+	defer s.Unlock()
 	s.calls = append(s.calls, Call{functionName, args, found})
 	return found
 }
 
 // CallsMatching returns a list of calls for with f() returns true.
 func (s *Spy) CallsMatching(f func(name string, args mock.Arguments) bool) []Call {
+	s.RLock()
+	defer s.RUnlock()
 	calls := []Call{}
 	for _, c := range s.calls {
 		if f(c.method, c.args) {
@@ -190,6 +198,8 @@ func (s *Spy) CallsTo(name string) []Call {
 
 // Calls returns all the calls made to the spy
 func (s *Spy) Calls() []Call {
+	s.RLock()
+	s.RUnlock()
 	cs := make([]Call, len(s.calls))
 	copy(cs, s.calls)
 	return cs
